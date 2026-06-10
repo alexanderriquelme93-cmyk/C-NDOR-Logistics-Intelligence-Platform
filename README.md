@@ -7,8 +7,8 @@ Cotizador estático (HTML + CSS + JavaScript puro) para **GitHub Pages**, sin ba
 - `index.html` — interfaz del cotizador.
 - `cotizador.css` — estilos (identidad de marca FLS).
 - `cotizador.js` — lógica de cálculo.
-- `data/historico.json` — histórico de operaciones; de aquí salen los costos promedio por vía.
-- `data/sla.json` — tabla de referencia de SLA.
+- `historico.json` — histórico de operaciones; de aquí salen los costos promedio por vía.
+- `sla.json` — tabla de referencia de SLA.
 
 ## Cómo funciona
 
