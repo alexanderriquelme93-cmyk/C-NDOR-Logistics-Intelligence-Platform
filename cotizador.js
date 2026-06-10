@@ -3,7 +3,7 @@
 /* ============================================================
    Cotizador de Embarque — multi-bulto
    Estático, sin backend. Estima costo y tránsito por bulto
-   usando el costo promedio histórico (data/historico.json).
+   usando el costo promedio histórico (historico.json).
    ============================================================ */
 
 const fmtInt = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 });
