@@ -1,8 +1,0 @@
-[
-  { "tipoOperacion": "Internacional", "viaTransporte": "Courier", "origen": "General", "slaDias": 10 },
-  { "tipoOperacion": "Internacional", "viaTransporte": "Aéreo", "origen": "General", "slaDias": 15 },
-  { "tipoOperacion": "Internacional", "viaTransporte": "Marítimo", "origen": "General", "slaDias": 22 },
-  { "tipoOperacion": "Local", "viaTransporte": "Nacional", "origen": "Santiago", "slaDias": 6 },
-  { "tipoOperacion": "Local", "viaTransporte": "Sobredimensionado sin escolta", "origen": "Santiago", "slaDias": 13 },
-  { "tipoOperacion": "Local", "viaTransporte": "Sobredimensionado con escolta", "origen": "Santiago", "slaDias": 31 }
-]
