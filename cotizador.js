@@ -31,12 +31,12 @@ let nextId = 1;
 async function init() {
   let raw;
   try {
-    const res = await fetch('data/historico.json', { cache: 'no-store' });
+    const res = await fetch('historico.json', { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     raw = await res.json();
   } catch (err) {
     showBanner(
-      `No se pudo cargar <strong>data/historico.json</strong>. Verifica que el archivo exista, ` +
+      `No se pudo cargar <strong>historico.json</strong>. Verifica que el archivo exista, ` +
       `sea JSON válido y que el sitio se sirva por HTTP (GitHub Pages o servidor local). Detalle: ${err.message}`,
       'error');
     return;
