@@ -36,4 +36,4 @@ Las estimaciones son **referenciales**, basadas en promedios históricos. No con
 
 ## Conexión a SharePoint (Power Automate)
 
-El cotizador solo necesita `data/historico.json` actualizado: mantener el Excel maestro en SharePoint, usar Power Automate para exportar el JSON y hacer commit al repositorio. GitHub Pages se actualiza solo.
+El cotizador solo necesita `historico.json` actualizado: mantener el Excel maestro en SharePoint, usar Power Automate para exportar el JSON y hacer commit al repositorio. GitHub Pages se actualiza solo.
