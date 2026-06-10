@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cotizador de Embarque · FLS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="cotizador.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <h1>Cotizador de Embarque</h1>
+        <p class="brand-sub">Estimación de costo y tránsito por bulto · basado en histórico</p>
+      </div>
+    </div>
+    <span class="pill" id="fxNote">tipo de cambio: —</span>
+  </header>
+
+  <main class="shell">
+    <div id="banner" class="banner" hidden></div>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Bultos del envío</h2>
+        <button id="addBulto" type="button" class="btn-ghost">+ Agregar bulto</button>
+      </div>
+      <p class="intro">Agrega cada bulto con su vía, peso y dimensiones. El costo usa el <strong>costo promedio histórico</strong> por vía; es referencial, no una tarifa oficial.</p>
+
+      <div class="table-wrapper">
+        <table class="bultos">
+          <thead>
+            <tr>
+              <th>Vía de transporte</th>
+              <th class="num">Peso (kg)</th>
+              <th>Dimensiones L×A×H (cm)</th>
+              <th class="num">Volumen (m³)</th>
+              <th class="num">Cant.</th>
+              <th class="num">Costo estimado</th>
+              <th class="num">Tránsito</th>
+              <th aria-label="acciones"></th>
+            </tr>
+          </thead>
+          <tbody id="bultosBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="totals" id="totals">
+      <article class="total-card total-main">
+        <span class="total-label">Costo total estimado</span>
+        <strong class="total-value" id="tCost">$0</strong>
+        <span class="total-foot" id="tCostUsd"></span>
+      </article>
+      <article class="total-card">
+        <span class="total-label">Tránsito del envío</span>
+        <strong class="total-value" id="tTransit">—</strong>
+        <span class="total-foot">vía más lenta del envío</span>
+      </article>
+      <article class="total-card">
+        <span class="total-label">Peso facturable total</span>
+        <strong class="total-value" id="tBillable">0 kg</strong>
+        <span class="total-foot" id="tPieces">0 bultos</span>
+      </article>
+      <article class="total-card">
+        <span class="total-label">Volumen total</span>
+        <strong class="total-value" id="tVolume">0 m³</strong>
+        <span class="total-foot" id="tWeight">0 kg reales</span>
+      </article>
+    </section>
+  </main>
+
+  <footer class="foot">
+    Cotizador estático · estimaciones según <code>data/historico.json</code> · referencial, no constituye tarifa oficial
+  </footer>
+
+  <script src="cotizador.js"></script>
+</body>
+</html>
