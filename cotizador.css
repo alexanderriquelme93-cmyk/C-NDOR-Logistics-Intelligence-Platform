@@ -202,31 +202,3 @@ table.bultos { width: 100%; border-collapse: collapse; font-size: 13px; min-widt
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
-
-/* ---------- Mode switch (Nacional / Internacional) ---------- */
-.mode-switch {
-  display: inline-flex;
-  gap: 4px;
-  padding: 4px;
-  background: var(--white);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  margin-bottom: 20px;
-}
-.mode-btn {
-  padding: 10px 20px;
-  background: transparent;
-  color: var(--muted);
-  border: none;
-  border-radius: 9px;
-  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
-  transition: background .15s, color .15s;
-}
-.mode-btn:hover { color: var(--fls-blue); }
-.mode-btn.active { background: var(--fls-blue); color: var(--white); }
-.mode-btn:focus-visible { outline: 2px solid var(--electric); outline-offset: 2px; }
-
-/* ---------- Columnas anchas (consignante, rutas DSV) ---------- */
-.col-wide { min-width: 200px; }
-.col-wide select { min-width: 190px; }
-table.bultos { min-width: 1100px; }
