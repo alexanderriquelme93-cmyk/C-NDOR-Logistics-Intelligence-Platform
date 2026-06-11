@@ -21,6 +21,11 @@ let bultos = [];
 let nextId = 1;
 
 /* ---------- Init ---------- */
+function on(id, evt, fn) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener(evt, fn);
+}
+
 async function init() {
   try {
     const res = await fetch('data.json', { cache: 'no-store' });
@@ -31,30 +36,30 @@ async function init() {
     return;
   }
 
-  document.getElementById('addBulto').addEventListener('click', () => { addBulto(); render(); });
-  document.getElementById('modeIntl').addEventListener('click', () => setMode('intl'));
-  document.getElementById('modeNac').addEventListener('click', () => setMode('nac'));
-  document.getElementById('modeCub').addEventListener('click', () => setMode('cub'));
-  document.getElementById('addCubBulto').addEventListener('click', () => { addCubBulto(); renderCub(); });
-  document.getElementById('cubUnidad').addEventListener('change', () => { onCubUnidadChange(); });
-  document.getElementById('cubRuta').addEventListener('change', () => { computeCubicaje(); });
+  on('addBulto', 'click', () => { addBulto(); render(); });
+  on('modeIntl', 'click', () => setMode('intl'));
+  on('modeNac', 'click', () => setMode('nac'));
+  on('modeCub', 'click', () => setMode('cub'));
+  on('addCubBulto', 'click', () => { addCubBulto(); renderCub(); });
+  on('cubUnidad', 'change', () => { onCubUnidadChange(); });
+  on('cubRuta', 'change', () => { computeCubicaje(); });
+
   loadFx();
-  setupCubicaje();
+  try { if (DATA.cubicaje) setupCubicaje(); } catch (e) { console.error('Cubicaje no disponible:', e); }
   setMode('intl');
 }
 
 function setMode(m) {
   mode = m;
-  document.getElementById('modeIntl').classList.toggle('active', m === 'intl');
-  document.getElementById('modeIntl').setAttribute('aria-selected', m === 'intl');
-  document.getElementById('modeNac').classList.toggle('active', m === 'nac');
-  document.getElementById('modeNac').setAttribute('aria-selected', m === 'nac');
-  document.getElementById('modeCub').classList.toggle('active', m === 'cub');
-  document.getElementById('modeCub').setAttribute('aria-selected', m === 'cub');
+  const mi = document.getElementById('modeIntl'), mn = document.getElementById('modeNac'), mc = document.getElementById('modeCub');
+  if (mi) { mi.classList.toggle('active', m === 'intl'); mi.setAttribute('aria-selected', m === 'intl'); }
+  if (mn) { mn.classList.toggle('active', m === 'nac'); mn.setAttribute('aria-selected', m === 'nac'); }
+  if (mc) { mc.classList.toggle('active', m === 'cub'); mc.setAttribute('aria-selected', m === 'cub'); }
 
   const isCub = m === 'cub';
-  document.getElementById('quoterView').hidden = isCub;
-  document.getElementById('cubicajeView').hidden = !isCub;
+  const qv = document.getElementById('quoterView'), cv = document.getElementById('cubicajeView');
+  if (qv) qv.hidden = isCub;
+  if (cv) cv.hidden = !isCub;
   if (isCub) { renderCub(); return; }
 
   document.getElementById('introText').innerHTML = m === 'intl'
@@ -623,7 +628,11 @@ function computeCubicaje() {
 /* ---------- Three.js ---------- */
 function draw3D(unit, placed) {
   const container = document.getElementById('cub3d');
-  if (!window.THREE || !container) return;
+  if (!container) return;
+  if (!window.THREE) {
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;padding:24px;text-align:center;color:#667f98;font-size:13px;">No se pudo cargar la vista 3D (librería Three.js bloqueada por la red). Los cálculos de cubicaje y costo siguen funcionando en el panel de la derecha.</div>';
+    return;
+  }
 
   if (!three) {
     const scene = new THREE.Scene();
