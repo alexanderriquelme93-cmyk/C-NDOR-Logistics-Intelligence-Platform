@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cotizador de Embarque · FLS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="cotizador.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <h1>Cotizador de Embarque</h1>
+        <p class="brand-sub">Costo y tránsito por bulto · datos reales de operación</p>
+      </div>
+    </div>
+    <span class="pill" id="fxNote">tipo de cambio: —</span>
+  </header>
+
+  <main class="shell">
+    <div id="banner" class="banner" hidden></div>
+
+    <div class="mode-switch" role="tablist" aria-label="Tipo de carga">
+      <button id="modeIntl" class="mode-btn active" role="tab" aria-selected="true" type="button">Carga Internacional</button>
+      <button id="modeNac" class="mode-btn" role="tab" aria-selected="false" type="button">Carga Nacional</button>
+    </div>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2 id="panelTitle">Bultos del envío</h2>
+        <button id="addBulto" type="button" class="btn-ghost">+ Agregar bulto</button>
+      </div>
+      <p class="intro" id="introText"></p>
+
+      <div class="table-wrapper">
+        <table class="bultos">
+          <thead id="bultosHead"></thead>
+          <tbody id="bultosBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="totals">
+      <article class="total-card total-main">
+        <span class="total-label">Costo total estimado</span>
+        <strong class="total-value" id="tCost">$0</strong>
+        <span class="total-foot" id="tCostUsd"></span>
+      </article>
+      <article class="total-card">
+        <span class="total-label">Tránsito del envío</span>
+        <strong class="total-value" id="tTransit">—</strong>
+        <span class="total-foot">ruta más lenta del envío</span>
+      </article>
+      <article class="total-card">
+        <span class="total-label">Peso facturable total</span>
+        <strong class="total-value" id="tBillable">0 kg</strong>
+        <span class="total-foot" id="tPieces">0 bultos</span>
+      </article>
+      <article class="total-card">
+        <span class="total-label">Volumen total</span>
+        <strong class="total-value" id="tVolume">0 m³</strong>
+        <span class="total-foot" id="tWeight">0 kg reales</span>
+      </article>
+    </section>
+  </main>
+
+  <footer class="foot">
+    Cotizador estático · internacional desde base histórica · nacional desde tarifario DSV · SLA 2026 · referencial, no constituye tarifa oficial
+  </footer>
+
+  <script src="cotizador.js"></script>
+</body>
+</html>
