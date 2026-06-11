@@ -34,7 +34,12 @@ async function init() {
   document.getElementById('addBulto').addEventListener('click', () => { addBulto(); render(); });
   document.getElementById('modeIntl').addEventListener('click', () => setMode('intl'));
   document.getElementById('modeNac').addEventListener('click', () => setMode('nac'));
+  document.getElementById('modeCub').addEventListener('click', () => setMode('cub'));
+  document.getElementById('addCubBulto').addEventListener('click', () => { addCubBulto(); renderCub(); });
+  document.getElementById('cubUnidad').addEventListener('change', () => { onCubUnidadChange(); });
+  document.getElementById('cubRuta').addEventListener('change', () => { computeCubicaje(); });
   loadFx();
+  setupCubicaje();
   setMode('intl');
 }
 
@@ -44,6 +49,13 @@ function setMode(m) {
   document.getElementById('modeIntl').setAttribute('aria-selected', m === 'intl');
   document.getElementById('modeNac').classList.toggle('active', m === 'nac');
   document.getElementById('modeNac').setAttribute('aria-selected', m === 'nac');
+  document.getElementById('modeCub').classList.toggle('active', m === 'cub');
+  document.getElementById('modeCub').setAttribute('aria-selected', m === 'cub');
+
+  const isCub = m === 'cub';
+  document.getElementById('quoterView').hidden = isCub;
+  document.getElementById('cubicajeView').hidden = !isCub;
+  if (isCub) { renderCub(); return; }
 
   document.getElementById('introText').innerHTML = m === 'intl'
     ? 'Carga internacional. Origen, consignante y aduana provienen de la base real. El costo se estima con el <strong>factor logístico 2026</strong> sobre el valor CIF (USD), por vía y país. El tránsito sale del <strong>SLA 2026</strong> según la región de origen. La factorización aplica solo a destino Chile y valor &lt; USD 10.000.'
@@ -446,5 +458,231 @@ async function loadFx() {
 /* ---------- UI ---------- */
 function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
 function showBanner(html, type) { const b = document.getElementById('banner'); b.innerHTML = html; b.className = 'banner' + (type === 'error' ? ' error' : ''); b.hidden = false; }
+
+/* ============================================================
+   Cubicaje 3D
+   ============================================================ */
+let cubBultos = [];
+let cubNextId = 1;
+let cubUnidades = {};   // nombre -> {L,W,H,kg} en metros
+let three = null;       // { scene, camera, renderer, raf, container }
+
+function setupCubicaje() {
+  // unir contenedores (intl) + camiones (nacional)
+  const cont = DATA.cubicaje?.contenedores || {};
+  const cam = DATA.cubicaje?.camionesDim || {};
+  cubUnidades = {};
+  Object.entries(cont).forEach(([k, v]) => cubUnidades[k] = { ...v, tipo: 'contenedor' });
+  Object.entries(cam).forEach(([k, v]) => cubUnidades[k] = { ...v, tipo: 'camion' });
+
+  const sel = document.getElementById('cubUnidad');
+  sel.innerHTML = '';
+  Object.keys(cubUnidades).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = k; sel.appendChild(o); });
+
+  addCubBulto();
+  onCubUnidadChange();
+}
+
+function addCubBulto() {
+  cubBultos.push({ id: cubNextId++, desc: `Bulto ${cubNextId - 1}`, L: 100, W: 80, H: 80, peso: 200, cant: 1 });
+}
+
+function removeCubBulto(id) {
+  cubBultos = cubBultos.filter(b => b.id !== id);
+  if (!cubBultos.length) addCubBulto();
+  renderCub();
+}
+
+function renderCub() {
+  const body = document.getElementById('cubBody');
+  body.innerHTML = '';
+  cubBultos.forEach(b => {
+    const tr = document.createElement('tr'); tr.dataset.id = b.id;
+    const tDesc = td(); const di = document.createElement('input'); di.type = 'text'; di.value = b.desc; di.addEventListener('input', e => { b.desc = e.target.value; }); tDesc.appendChild(di);
+    const tL = td('num'); tL.appendChild(numInput(b.L, '0', v => { b.L = v; computeCubicaje(); }));
+    const tW = td('num'); tW.appendChild(numInput(b.W, '0', v => { b.W = v; computeCubicaje(); }));
+    const tH = td('num'); tH.appendChild(numInput(b.H, '0', v => { b.H = v; computeCubicaje(); }));
+    const tP = td('num'); tP.appendChild(numInput(b.peso, '0', v => { b.peso = v; computeCubicaje(); }));
+    const tC = td('num col-cant'); const ci = numInput(b.cant, '1', v => { b.cant = v; computeCubicaje(); }); ci.min = '1'; tC.appendChild(ci);
+    const tD = delCellCub(b.id);
+    tr.append(tDesc, tL, tW, tH, tP, tC, tD);
+    body.appendChild(tr);
+  });
+  computeCubicaje();
+}
+
+function delCellCub(id) { const c = td('num'); const b = document.createElement('button'); b.type = 'button'; b.className = 'row-del'; b.textContent = '×'; b.addEventListener('click', () => removeCubBulto(id)); c.appendChild(b); return c; }
+
+function onCubUnidadChange() {
+  const u = cubUnidades[document.getElementById('cubUnidad').value];
+  const wrap = document.getElementById('cubRutaWrap');
+  const rutaSel = document.getElementById('cubRuta');
+  rutaSel.innerHTML = '';
+  if (u && u.tipo === 'camion') {
+    // poblar rutas DSV base para ese camión
+    wrap.hidden = false;
+    const rutas = DATA.nacionalDSV.base.filter(r => r.tarifas[document.getElementById('cubUnidad').value] != null);
+    rutas.forEach((r, i) => { const o = document.createElement('option'); o.value = i; o.textContent = `${r.origen} → ${r.destino}`; rutaSel.appendChild(o); });
+    rutaSel._rutas = rutas;
+  } else if (u && u.tipo === 'contenedor') {
+    // costo por contenedor: factor sobre valor no aplica; usamos referencia por vía marítima USD/m³ histórica simple
+    wrap.hidden = true;
+  } else { wrap.hidden = true; }
+  computeCubicaje();
+}
+
+// Empaquetado simple por capas (shelf/layer packing) — estima cuántos bultos caben y dibuja
+function packBultos(unit, bultos) {
+  // unit en metros; bultos en cm -> m
+  const UL = unit.L, UW = unit.W, UH = unit.H;
+  // expandir cantidades
+  const items = [];
+  bultos.forEach(b => {
+    const n = Math.max(1, Math.round(num(b.cant)) || 1);
+    for (let i = 0; i < n; i++) items.push({ L: num(b.L) / 100, W: num(b.W) / 100, H: num(b.H) / 100, peso: num(b.peso), desc: b.desc });
+  });
+  // ordenar por volumen desc
+  items.sort((a, b) => (b.L * b.W * b.H) - (a.L * a.W * a.H));
+
+  const placed = [];
+  let cursorX = 0, cursorY = 0, cursorZ = 0, rowDepth = 0, layerHeight = 0;
+  let fit = 0;
+  for (const it of items) {
+    // ¿cabe en la fila actual?
+    if (cursorX + it.L > UL + 1e-6) { // nueva fila (avanzar en W)
+      cursorX = 0; cursorY += rowDepth; rowDepth = 0;
+    }
+    if (cursorY + it.W > UW + 1e-6) { // nueva capa (avanzar en H)
+      cursorX = 0; cursorY = 0; cursorZ += layerHeight; layerHeight = 0; rowDepth = 0;
+    }
+    if (cursorZ + it.H > UH + 1e-6) { break; } // no caben más
+    placed.push({ x: cursorX, y: cursorY, z: cursorZ, L: it.L, W: it.W, H: it.H, desc: it.desc });
+    cursorX += it.L;
+    rowDepth = Math.max(rowDepth, it.W);
+    layerHeight = Math.max(layerHeight, it.H);
+    fit++;
+  }
+  return { placed, fit, total: items.length };
+}
+
+function computeCubicaje() {
+  const unitName = document.getElementById('cubUnidad').value;
+  const unit = cubUnidades[unitName];
+  if (!unit) return;
+
+  // totales de carga
+  let totVol = 0, totKg = 0, totBultos = 0;
+  cubBultos.forEach(b => {
+    const n = Math.max(1, Math.round(num(b.cant)) || 1);
+    totVol += (num(b.L) * num(b.W) * num(b.H) / 1e6) * n;
+    totKg += num(b.peso) * n;
+    totBultos += n;
+  });
+
+  const unitVol = unit.L * unit.W * unit.H;
+  const unitKg = unit.kg;
+
+  // unidades necesarias: por volumen y por peso, tomamos el mayor
+  const porVol = unitVol ? Math.ceil(totVol / (unitVol * 0.85)) : 1; // 85% factor de estiba realista
+  const porKg = unitKg ? Math.ceil(totKg / unitKg) : 1;
+  const unidades = Math.max(1, porVol, porKg);
+
+  // packing visual de UNA unidad (lo que cabe en la primera)
+  const pack = packBultos(unit, cubBultos);
+
+  // ocupación de la primera unidad
+  const volPct = unitVol ? Math.min(999, (totVol / unidades) / unitVol * 100) : 0;
+  const kgPct = unitKg ? Math.min(999, (totKg / unidades) / unitKg * 100) : 0;
+
+  setText('cubUnits', fmtInt.format(unidades));
+  setText('cubUnitName', unitName);
+  setText('cubVolPct', `${fmtInt.format(volPct)}%`);
+  setText('cubVolDet', `${fmtDec.format(totVol)} / ${fmtDec.format(unitVol * unidades)} m³`);
+  setText('cubKgPct', `${fmtInt.format(kgPct)}%`);
+  setText('cubKgDet', `${fmtInt.format(totKg)} / ${fmtInt.format(unitKg * unidades)} kg`);
+  setText('cubFit', `${pack.fit} / ${pack.total}`);
+
+  // costo
+  let costo = null;
+  if (unit.tipo === 'camion') {
+    const rutaSel = document.getElementById('cubRuta');
+    const rutas = rutaSel._rutas || [];
+    const ruta = rutas[Number(rutaSel.value)] || null;
+    const tarifa = ruta ? ruta.tarifas[unitName] : null;
+    if (tarifa != null) { costo = tarifa * unidades; setText('cubCost', fmtMoney.format(costo)); setText('cubCostFoot', `${unidades} × ${fmtMoney.format(tarifa)}`); }
+    else { setText('cubCost', '—'); setText('cubCostFoot', 'elige ruta'); }
+  } else {
+    // contenedor: referencia por m³ marítimo (USD/kg ya lo tenemos; aquí estimamos por volumen llenando)
+    setText('cubCost', `${unidades} ud.`);
+    setText('cubCostFoot', 'costo se calcula en Internacional');
+  }
+
+  draw3D(unit, pack.placed);
+}
+
+/* ---------- Three.js ---------- */
+function draw3D(unit, placed) {
+  const container = document.getElementById('cub3d');
+  if (!window.THREE || !container) return;
+
+  if (!three) {
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xe8edf3);
+    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    container.appendChild(renderer.domElement);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(10, 20, 10); scene.add(dir);
+    three = { scene, camera, renderer, group: null };
+    window.addEventListener('resize', () => {
+      if (mode !== 'cub') return;
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      camera.aspect = container.clientWidth / container.clientHeight; camera.updateProjectionMatrix();
+    });
+    // rotación automática lenta
+    let angle = 0.6;
+    function animate() {
+      three.raf = requestAnimationFrame(animate);
+      angle += 0.003;
+      const r = Math.max(unit.L, unit.W, unit.H) * 2.2;
+      camera.position.set(Math.cos(angle) * r, r * 0.7, Math.sin(angle) * r);
+      camera.lookAt(0, unit.H / 2, 0);
+      renderer.render(scene, camera);
+    }
+    animate();
+  }
+
+  // limpiar grupo anterior
+  if (three.group) three.scene.remove(three.group);
+  const group = new THREE.Group();
+
+  // contenedor wireframe
+  const boxGeo = new THREE.BoxGeometry(unit.L, unit.H, unit.W);
+  const edges = new THREE.EdgesGeometry(boxGeo);
+  const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x002a54 }));
+  line.position.set(0, unit.H / 2, 0);
+  group.add(line);
+  // piso
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(unit.L, unit.W), new THREE.MeshBasicMaterial({ color: 0xc7d2e0, transparent: true, opacity: 0.5 }));
+  floor.rotation.x = -Math.PI / 2; group.add(floor);
+
+  // bultos
+  const colors = [0x004fff, 0x36d1b7, 0x82afbe, 0xce9048, 0x7b335f, 0x0fc580];
+  placed.forEach((p, i) => {
+    const g = new THREE.BoxGeometry(p.L, p.H, p.W);
+    const m = new THREE.MeshLambertMaterial({ color: colors[i % colors.length] });
+    const cube = new THREE.Mesh(g, m);
+    // posicionar respecto al origen centrado
+    cube.position.set(-unit.L / 2 + p.x + p.L / 2, p.z + p.H / 2, -unit.W / 2 + p.y + p.W / 2);
+    group.add(cube);
+    const eg = new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 }));
+    eg.position.copy(cube.position); group.add(eg);
+  });
+
+  three.group = group;
+  three.scene.add(group);
+}
 
 document.addEventListener('DOMContentLoaded', init);

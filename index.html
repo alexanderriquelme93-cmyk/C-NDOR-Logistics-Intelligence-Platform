@@ -27,8 +27,10 @@
     <div class="mode-switch" role="tablist" aria-label="Tipo de carga">
       <button id="modeIntl" class="mode-btn active" role="tab" aria-selected="true" type="button">Carga Internacional</button>
       <button id="modeNac" class="mode-btn" role="tab" aria-selected="false" type="button">Carga Nacional</button>
+      <button id="modeCub" class="mode-btn" role="tab" aria-selected="false" type="button">Cubicaje 3D</button>
     </div>
 
+    <div id="quoterView">
     <section class="panel">
       <div class="panel-head">
         <h2 id="panelTitle">Bultos del envío</h2>
@@ -66,12 +68,77 @@
         <span class="total-foot" id="tWeight">0 kg reales</span>
       </article>
     </section>
+    </div>
+
+    <div id="cubicajeView" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Cubicaje 3D</h2>
+          <button id="addCubBulto" type="button" class="btn-ghost">+ Agregar bulto</button>
+        </div>
+        <p class="intro">Define tus bultos y el contenedor o camión. El sistema acomoda la carga en 3D, calcula cuántas unidades necesitas y el costo estimado.</p>
+
+        <div class="cub-controls">
+          <div class="cub-field">
+            <label for="cubUnidad">Unidad de carga</label>
+            <select id="cubUnidad"></select>
+          </div>
+          <div class="cub-field" id="cubRutaWrap" hidden>
+            <label for="cubRuta">Ruta / costo</label>
+            <select id="cubRuta"></select>
+          </div>
+        </div>
+
+        <div class="table-wrapper">
+          <table class="bultos">
+            <thead>
+              <tr><th>Descripción</th><th class="num">Largo (cm)</th><th class="num">Ancho (cm)</th><th class="num">Alto (cm)</th><th class="num">Peso (kg)</th><th class="num">Cant.</th><th></th></tr>
+            </thead>
+            <tbody id="cubBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="cub-layout">
+        <div class="panel cub-canvas-panel">
+          <div id="cub3d" class="cub-3d"></div>
+        </div>
+        <div class="cub-stats">
+          <article class="total-card total-main">
+            <span class="total-label">Unidades necesarias</span>
+            <strong class="total-value" id="cubUnits">0</strong>
+            <span class="total-foot" id="cubUnitName">—</span>
+          </article>
+          <article class="total-card">
+            <span class="total-label">Ocupación volumen</span>
+            <strong class="total-value" id="cubVolPct">0%</strong>
+            <span class="total-foot" id="cubVolDet">0 / 0 m³</span>
+          </article>
+          <article class="total-card">
+            <span class="total-label">Ocupación peso</span>
+            <strong class="total-value" id="cubKgPct">0%</strong>
+            <span class="total-foot" id="cubKgDet">0 / 0 kg</span>
+          </article>
+          <article class="total-card">
+            <span class="total-label">Costo estimado</span>
+            <strong class="total-value" id="cubCost">$0</strong>
+            <span class="total-foot" id="cubCostFoot">según unidades</span>
+          </article>
+          <article class="total-card">
+            <span class="total-label">Bultos acomodados</span>
+            <strong class="total-value" id="cubFit">0 / 0</strong>
+            <span class="total-foot">caben / total</span>
+          </article>
+        </div>
+      </section>
+    </div>
   </main>
 
   <footer class="foot">
     Cotizador estático · internacional desde base histórica · nacional desde tarifario DSV · SLA 2026 · referencial, no constituye tarifa oficial
   </footer>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="cotizador.js"></script>
 </body>
 </html>

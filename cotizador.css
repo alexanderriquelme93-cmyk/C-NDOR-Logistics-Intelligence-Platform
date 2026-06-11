@@ -237,3 +237,15 @@ table.bultos { min-width: 1100px; }
 /* ---------- Vehículo sugerido (nacional) ---------- */
 .cell-veh { font-family: "JetBrains Mono", monospace; font-size: 12px; font-weight: 600; color: var(--fls-blue); }
 .cell-veh.veh-over { color: var(--rag-red); }
+
+/* ---------- Cubicaje 3D ---------- */
+.cub-controls { display: flex; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
+.cub-field { min-width: 240px; }
+.cub-field label { display: block; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); margin-bottom: 7px; }
+.cub-field select { width: 100%; padding: 11px 12px; background: var(--white); color: var(--text); border: 1px solid var(--line); border-radius: 11px; font: inherit; font-size: 14px; }
+.cub-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+.cub-canvas-panel { padding: 0; overflow: hidden; }
+.cub-3d { width: 100%; height: 480px; background: linear-gradient(180deg, #eef2f7, #dfe5ee); border-radius: var(--radius); }
+.cub-stats { display: flex; flex-direction: column; gap: 12px; }
+.cub-stats .total-card { margin: 0; }
+@media (max-width: 920px) { .cub-layout { grid-template-columns: 1fr; } .cub-3d { height: 360px; } }
