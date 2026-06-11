@@ -625,73 +625,67 @@ function computeCubicaje() {
   draw3D(unit, pack.placed);
 }
 
-/* ---------- Three.js ---------- */
+/* ---------- Vista de cubicaje (2D canvas, sin WebGL) ---------- */
 function draw3D(unit, placed) {
   const container = document.getElementById('cub3d');
   if (!container) return;
-  if (!window.THREE) {
-    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;padding:24px;text-align:center;color:#667f98;font-size:13px;">No se pudo cargar la vista 3D (librería Three.js bloqueada por la red). Los cálculos de cubicaje y costo siguen funcionando en el panel de la derecha.</div>';
-    return;
+
+  // Crear/obtener canvas 2D
+  let canvas = container.querySelector('canvas.cub2d');
+  if (!canvas) {
+    container.innerHTML = '';
+    canvas = document.createElement('canvas');
+    canvas.className = 'cub2d';
+    container.appendChild(canvas);
   }
+  const W = container.clientWidth || 600;
+  const H = container.clientHeight || 460;
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
 
-  if (!three) {
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xe8edf3);
-    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    container.appendChild(renderer.domElement);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.75));
-    const dir = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(10, 20, 10); scene.add(dir);
-    three = { scene, camera, renderer, group: null };
-    window.addEventListener('resize', () => {
-      if (mode !== 'cub') return;
-      renderer.setSize(container.clientWidth, container.clientHeight);
-      camera.aspect = container.clientWidth / container.clientHeight; camera.updateProjectionMatrix();
-    });
-    // rotación automática lenta
-    let angle = 0.6;
-    function animate() {
-      three.raf = requestAnimationFrame(animate);
-      angle += 0.003;
-      const r = Math.max(unit.L, unit.W, unit.H) * 2.2;
-      camera.position.set(Math.cos(angle) * r, r * 0.7, Math.sin(angle) * r);
-      camera.lookAt(0, unit.H / 2, 0);
-      renderer.render(scene, camera);
-    }
-    animate();
-  }
+  // Dos vistas: planta (arriba) y alzado lateral (abajo)
+  const pad = 24;
+  const half = (H - pad * 3) / 2;
+  drawView(ctx, 'PLANTA (vista superior)', pad, pad, W - pad * 2, half, unit, placed, 'top');
+  drawView(ctx, 'ALZADO (vista lateral)', pad, pad * 2 + half, W - pad * 2, half, unit, placed, 'side');
+}
 
-  // limpiar grupo anterior
-  if (three.group) three.scene.remove(three.group);
-  const group = new THREE.Group();
+function drawView(ctx, titulo, ox, oy, vw, vh, unit, placed, modo) {
+  // dimensiones del contenedor en el plano (m)
+  const cw = unit.L;                          // ancho dibujado = largo del contenedor
+  const ch = (modo === 'top') ? unit.W : unit.H;
+  const scale = Math.min((vw) / cw, (vh - 18) / ch) * 0.92;
+  const dw = cw * scale, dh = ch * scale;
+  const x0 = ox + (vw - dw) / 2;
+  const y0 = oy + 18 + (vh - 18 - dh) / 2;
 
-  // contenedor wireframe
-  const boxGeo = new THREE.BoxGeometry(unit.L, unit.H, unit.W);
-  const edges = new THREE.EdgesGeometry(boxGeo);
-  const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x002a54 }));
-  line.position.set(0, unit.H / 2, 0);
-  group.add(line);
-  // piso
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(unit.L, unit.W), new THREE.MeshBasicMaterial({ color: 0xc7d2e0, transparent: true, opacity: 0.5 }));
-  floor.rotation.x = -Math.PI / 2; group.add(floor);
+  // título
+  ctx.fillStyle = '#667f98'; ctx.font = '600 11px Inter, sans-serif'; ctx.textBaseline = 'top';
+  ctx.fillText(titulo.toUpperCase(), ox, oy);
+
+  // contenedor
+  ctx.strokeStyle = '#002a54'; ctx.lineWidth = 2;
+  ctx.strokeRect(x0, y0, dw, dh);
+  ctx.fillStyle = 'rgba(199,210,224,0.25)';
+  ctx.fillRect(x0, y0, dw, dh);
 
   // bultos
-  const colors = [0x004fff, 0x36d1b7, 0x82afbe, 0xce9048, 0x7b335f, 0x0fc580];
+  const colors = ['#004fff', '#36d1b7', '#82afbe', '#ce9048', '#7b335f', '#0fc580'];
   placed.forEach((p, i) => {
-    const g = new THREE.BoxGeometry(p.L, p.H, p.W);
-    const m = new THREE.MeshLambertMaterial({ color: colors[i % colors.length] });
-    const cube = new THREE.Mesh(g, m);
-    // posicionar respecto al origen centrado
-    cube.position.set(-unit.L / 2 + p.x + p.L / 2, p.z + p.H / 2, -unit.W / 2 + p.y + p.W / 2);
-    group.add(cube);
-    const eg = new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 }));
-    eg.position.copy(cube.position); group.add(eg);
+    let bx, by, bw, bh;
+    if (modo === 'top') {        // plano X (largo) × Y (ancho)
+      bx = x0 + p.x * scale; by = y0 + p.y * scale; bw = p.L * scale; bh = p.W * scale;
+    } else {                      // plano X (largo) × Z (alto)
+      bx = x0 + p.x * scale; by = y0 + dh - (p.z + p.H) * scale; bw = p.L * scale; bh = p.H * scale;
+    }
+    ctx.fillStyle = colors[i % colors.length];
+    ctx.globalAlpha = 0.78;
+    ctx.fillRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
+    ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
   });
-
-  three.group = group;
-  three.scene.add(group);
 }
 
 document.addEventListener('DOMContentLoaded', init);
