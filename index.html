@@ -15,7 +15,7 @@
       <span class="brand-mark" aria-hidden="true"></span>
       <div>
         <h1>Cotizador de Embarque</h1>
-        <p class="brand-sub">Estimación de costo y tránsito por bulto · basado en histórico</p>
+        <p class="brand-sub">Costo y tránsito por bulto · datos reales de operación</p>
       </div>
     </div>
     <span class="pill" id="fxNote">tipo de cambio: —</span>
@@ -24,35 +24,27 @@
   <main class="shell">
     <div id="banner" class="banner" hidden></div>
 
+    <div class="mode-switch" role="tablist" aria-label="Tipo de carga">
+      <button id="modeIntl" class="mode-btn active" role="tab" aria-selected="true" type="button">Carga Internacional</button>
+      <button id="modeNac" class="mode-btn" role="tab" aria-selected="false" type="button">Carga Nacional</button>
+    </div>
+
     <section class="panel">
       <div class="panel-head">
-        <h2>Bultos del envío</h2>
+        <h2 id="panelTitle">Bultos del envío</h2>
         <button id="addBulto" type="button" class="btn-ghost">+ Agregar bulto</button>
       </div>
-      <p class="intro">Agrega cada bulto con su vía, origen, destino, peso y dimensiones. El volumen (m³) se calcula solo desde las dimensiones. El costo usa el <strong>costo promedio histórico</strong> por vía; es referencial, no una tarifa oficial.</p>
+      <p class="intro" id="introText"></p>
 
       <div class="table-wrapper">
         <table class="bultos">
-          <thead>
-            <tr>
-              <th>Vía de transporte</th>
-              <th>Origen</th>
-              <th>Destino</th>
-              <th class="num">Peso (kg)</th>
-              <th>Dimensiones L×A×H (cm)</th>
-              <th class="num">Volumen (m³)</th>
-              <th class="num">Cant.</th>
-              <th class="num">Costo estimado</th>
-              <th class="num">Tránsito</th>
-              <th aria-label="acciones"></th>
-            </tr>
-          </thead>
+          <thead id="bultosHead"></thead>
           <tbody id="bultosBody"></tbody>
         </table>
       </div>
     </section>
 
-    <section class="totals" id="totals">
+    <section class="totals">
       <article class="total-card total-main">
         <span class="total-label">Costo total estimado</span>
         <strong class="total-value" id="tCost">$0</strong>
@@ -61,7 +53,7 @@
       <article class="total-card">
         <span class="total-label">Tránsito del envío</span>
         <strong class="total-value" id="tTransit">—</strong>
-        <span class="total-foot">vía más lenta del envío</span>
+        <span class="total-foot">ruta más lenta del envío</span>
       </article>
       <article class="total-card">
         <span class="total-label">Peso facturable total</span>
@@ -77,7 +69,7 @@
   </main>
 
   <footer class="foot">
-    Cotizador estático · estimaciones según <code>historico.json</code> · referencial, no constituye tarifa oficial
+    Cotizador estático · internacional desde base histórica · nacional desde tarifario DSV · SLA 2026 · referencial, no constituye tarifa oficial
   </footer>
 
   <script src="cotizador.js"></script>
