@@ -233,3 +233,7 @@ table.bultos { min-width: 1100px; }
 
 /* ---------- Aviso de factorización (valor alto) ---------- */
 .cell-cost.cost-warn { color: var(--rag-amber); }
+
+/* ---------- Vehículo sugerido (nacional) ---------- */
+.cell-veh { font-family: "JetBrains Mono", monospace; font-size: 12px; font-weight: 600; color: var(--fls-blue); }
+.cell-veh.veh-over { color: var(--rag-red); }

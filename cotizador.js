@@ -47,7 +47,7 @@ function setMode(m) {
 
   document.getElementById('introText').innerHTML = m === 'intl'
     ? 'Carga internacional. Origen, consignante y aduana provienen de la base real. El costo se estima con el <strong>factor logístico 2026</strong> sobre el valor CIF (USD), por vía y país. El tránsito sale del <strong>SLA 2026</strong> según la región de origen. La factorización aplica solo a destino Chile y valor &lt; USD 10.000.'
-    : 'Carga nacional (solo transporte terrestre). Las rutas, vehículos y tarifas provienen del <strong>tarifario DSV</strong> (Base o Urgencia); el tránsito sale del <strong>SLA local 2026</strong> por ciudad destino.';
+    : 'Carga nacional (solo transporte terrestre). Ingresa peso y dimensiones: el sistema <strong>sugiere el camión</strong> (entre los que tienen tarifa en la ruta) y el % de ocupación. Tarifas del <strong>tarifario DSV</strong> (Normal, Urgencia o IMO); el tránsito sale del <strong>SLA local 2026</strong> por ciudad destino.';
 
   buildHead();
   bultos = [];
@@ -60,10 +60,10 @@ function setMode(m) {
 function buildHead() {
   const head = document.getElementById('bultosHead');
   const cols = mode === 'intl'
-    ? ['Vía', 'Origen (país)', 'Consignante', 'Aduana', 'Valor CIF (USD)', 'Peso (kg)', 'Dim. L×A×H (cm)', 'Vol. (m³)', 'Cant.', 'Costo est.', 'Tránsito', '']
-    : ['Origen', 'Destino', 'Vehículo', 'Servicio', 'Tipo carga', 'Cant.', 'Costo est.', 'Tránsito', ''];
+    ? ['Vía', 'Origen (país)', 'Consignante', 'Aduana', 'Método', 'Valor CIF (USD)', 'Peso (kg)', 'Dim. L×A×H (cm)', 'Vol. (m³)', 'Cant.', 'Costo est.', 'Tránsito', '']
+    : ['Origen', 'Destino', 'Peso (kg)', 'Dim. L×A×H (cm)', 'Vehículo sugerido', 'Servicio', 'Tipo carga', 'Cant.', 'Costo est.', 'Tránsito', ''];
   head.innerHTML = '<tr>' + cols.map((c, i) => {
-    const numClass = (mode === 'intl' && [4, 5, 7, 8, 9, 10].includes(i)) || (mode === 'nac' && [5, 6, 7].includes(i)) ? ' class="num"' : '';
+    const numClass = (mode === 'intl' && [5, 6, 8, 9, 10, 11].includes(i)) || (mode === 'nac' && [2, 7, 8, 9].includes(i)) ? ' class="num"' : '';
     return `<th${numClass}>${c}</th>`;
   }).join('') + '</tr>';
 }
@@ -87,13 +87,30 @@ function slaIntl(via, pais) {
   return tabla[region] ?? null;
 }
 
-// Nacional (DSV) — base o urgencia
-function rutasNac(urgente) { return urgente ? DATA.nacionalDSV.urgencia : DATA.nacionalDSV.base; }
-function origenesNac(urgente) { return [...new Set(rutasNac(urgente).map(r => r.origen))].sort(); }
-function destinosNacDe(origen, urgente) { return [...new Set(rutasNac(urgente).filter(r => r.origen === origen).map(r => r.destino))].sort(); }
-function rutaNac(origen, destino, urgente) { return rutasNac(urgente).find(r => r.origen === origen && r.destino === destino) || null; }
-function vehiculos(origen, destino, urgente) { const r = rutaNac(origen, destino, urgente); return r ? Object.keys(r.tarifas) : []; }
-function tarifaNac(origen, destino, vehiculo, urgente) { const r = rutaNac(origen, destino, urgente); return r ? (r.tarifas[vehiculo] ?? null) : null; }
+// Nacional (DSV) — base, urgencia o IMO
+function tarifarioNac(servicio) {
+  if (servicio === 'Urgencia') return DATA.nacionalDSV.urgencia;
+  if (servicio === 'IMO') return DATA.nacionalDSV.imo;
+  return DATA.nacionalDSV.base;
+}
+function origenesNac(servicio) { return [...new Set(tarifarioNac(servicio).map(r => r.origen))].sort(); }
+function destinosNacDe(origen, servicio) { return [...new Set(tarifarioNac(servicio).filter(r => r.origen === origen).map(r => r.destino))].sort(); }
+function rutaNac(origen, destino, servicio) { return tarifarioNac(servicio).find(r => r.origen === origen && r.destino === destino) || null; }
+function vehiculosRuta(origen, destino, servicio) { const r = rutaNac(origen, destino, servicio); return r ? Object.keys(r.tarifas) : []; }
+function tarifaNac(origen, destino, vehiculo, servicio) { const r = rutaNac(origen, destino, servicio); return r ? (r.tarifas[vehiculo] ?? null) : null; }
+function capacidad(veh) { return (DATA.nacionalDSV.capacidades || {})[veh] || null; }
+// recomienda el camión más pequeño (con tarifa en la ruta) que alcance para peso y volumen
+function recomendarVehiculo(origen, destino, servicio, pesoReal, vol) {
+  const disponibles = vehiculosRuta(origen, destino, servicio);
+  if (!disponibles.length) return null;
+  const orden = DATA.nacionalDSV.vehiculos.filter(v => disponibles.includes(v)); // menor a mayor
+  for (const v of orden) {
+    const cap = capacidad(v);
+    if (!cap) continue;
+    if (pesoReal <= cap.kg && vol <= cap.m3) return v;
+  }
+  return orden[orden.length - 1]; // si nada alcanza, el mayor disponible
+}
 function slaLocal(tipoCarga, ciudad) {
   const tabla = DATA.sla.local[tipoCarga] || {};
   // mapear destino DSV (puede ser faena minera) a la ciudad del SLA
@@ -111,13 +128,12 @@ function addBulto() {
     const via = viasIntl()[0] || '';
     const pais = paisesDe(via)[0] || '';
     const cons = consignantesDe(via, pais)[0] || '';
-    bultos.push({ id: nextId++, via, pais, cons, aduana: aduanas()[0] || '', valor: '', peso: '', L: '', W: '', H: '', vol: '', cant: 1 });
+    bultos.push({ id: nextId++, via, pais, cons, aduana: aduanas()[0] || '', metodo: 'factor', valor: '', peso: '', L: '', W: '', H: '', vol: '', cant: 1 });
   } else {
-    const urgente = false;
-    const origen = origenesNac(urgente)[0] || '';
-    const destino = destinosNacDe(origen, urgente)[0] || '';
-    const veh = vehiculos(origen, destino, urgente)[0] || '';
-    bultos.push({ id: nextId++, origen, destino, veh, urgente, tipoCarga: 'General', cant: 1 });
+    const servicio = 'Normal';
+    const origen = origenesNac(servicio)[0] || '';
+    const destino = destinosNacDe(origen, servicio)[0] || '';
+    bultos.push({ id: nextId++, origen, destino, servicio, tipoCarga: 'General', peso: '', L: '', W: '', H: '', vol: '', cant: 1 });
   }
 }
 
@@ -165,9 +181,14 @@ function rowIntl(b) {
   const tdAdu = td();
   tdAdu.appendChild(selectInput(aduanas(), b.aduana, v => { b.aduana = v; }));
 
+  // Método de costo: factor (valor CIF) o kilos (USD/kg)
+  const tdMet = td();
+  tdMet.appendChild(selectInput(['factor', 'kilos'], b.metodo, v => { b.metodo = v; recompute(); }));
+
   // Valor CIF (USD) — base de la factorización
   const tdValor = td('num');
-  tdValor.appendChild(numInput(b.valor, '0', v => { b.valor = v; recompute(); }));
+  const valorInput = numInput(b.valor, '0', v => { b.valor = v; recompute(); });
+  tdValor.appendChild(valorInput);
 
   // Peso
   const tdPeso = td('num');
@@ -198,7 +219,7 @@ function rowIntl(b) {
 
   const tdCost = costCell(), tdTransit = transitCell(), tdDel = delCell(b.id);
 
-  tr.append(tdVia, tdPais, tdCons, tdAdu, tdValor, tdPeso, tdDims, tdVol, tdCant, tdCost, tdTransit, tdDel);
+  tr.append(tdVia, tdPais, tdCons, tdAdu, tdMet, tdValor, tdPeso, tdDims, tdVol, tdCant, tdCost, tdTransit, tdDel);
   return tr;
 }
 
@@ -209,35 +230,48 @@ function rowNac(b) {
 
   // Origen
   const tdOri = td('col-wide');
-  tdOri.appendChild(selectInput(origenesNac(b.urgente), b.origen, v => {
+  tdOri.appendChild(selectInput(origenesNac(b.servicio), b.origen, v => {
     b.origen = v;
-    const ds = destinosNacDe(v, b.urgente); if (!ds.includes(b.destino)) b.destino = ds[0] || '';
-    const vs = vehiculos(b.origen, b.destino, b.urgente); if (!vs.includes(b.veh)) b.veh = vs[0] || '';
+    const ds = destinosNacDe(v, b.servicio); if (!ds.includes(b.destino)) b.destino = ds[0] || '';
     render();
   }));
 
   // Destino
   const tdDes = td('col-wide');
-  tdDes.appendChild(selectInput(destinosNacDe(b.origen, b.urgente), b.destino, v => {
+  tdDes.appendChild(selectInput(destinosNacDe(b.origen, b.servicio), b.destino, v => {
     b.destino = v;
-    const vs = vehiculos(b.origen, v, b.urgente); if (!vs.includes(b.veh)) b.veh = vs[0] || '';
     render();
   }));
 
-  // Vehículo (todos los del tarifario)
-  const tdVeh = td('col-wide');
-  tdVeh.appendChild(selectInput(vehiculos(b.origen, b.destino, b.urgente), b.veh, v => { b.veh = v; recompute(); }));
+  // Peso
+  const tdPeso = td('num');
+  tdPeso.appendChild(numInput(b.peso, '0', v => { b.peso = v; recompute(); }));
 
-  // Servicio: Normal / Urgencia
+  // Dimensiones (para recomendar camión)
+  const tdDims = td();
+  const wrap = document.createElement('div'); wrap.className = 'dims-cell';
+  const syncVol = () => {
+    const L = num(b.L), W = num(b.W), H = num(b.H);
+    b.vol = (L && W && H) ? +((L * W * H) / 1e6).toFixed(3) : 0;
+    recompute();
+  };
+  wrap.append(numInput(b.L, 'L', v => { b.L = v; syncVol(); }), sep('×'), numInput(b.W, 'A', v => { b.W = v; syncVol(); }), sep('×'), numInput(b.H, 'H', v => { b.H = v; syncVol(); }));
+  tdDims.appendChild(wrap);
+
+  // Vehículo sugerido (se rellena en recompute)
+  const tdVeh = td('col-wide');
+  const vehSpan = document.createElement('span');
+  vehSpan.dataset.role = 'veh'; vehSpan.className = 'cell-veh'; vehSpan.textContent = '—';
+  tdVeh.appendChild(vehSpan);
+
+  // Servicio: Normal / Urgencia / IMO
   const tdServ = td();
-  const servSel = selectInput(['Normal', 'Urgencia'], b.urgente ? 'Urgencia' : 'Normal', v => {
-    b.urgente = (v === 'Urgencia');
-    // revalidar ruta/vehículo en el tarifario correspondiente
-    const ds = destinosNacDe(b.origen, b.urgente); if (!ds.includes(b.destino)) b.destino = ds[0] || '';
-    const vs = vehiculos(b.origen, b.destino, b.urgente); if (!vs.includes(b.veh)) b.veh = vs[0] || '';
+  tdServ.appendChild(selectInput(['Normal', 'Urgencia', 'IMO'], b.servicio, v => {
+    b.servicio = v;
+    const os = origenesNac(v); if (!os.includes(b.origen)) b.origen = os[0] || '';
+    const ds = destinosNacDe(b.origen, v); if (!ds.includes(b.destino)) b.destino = ds[0] || '';
     render();
-  });
-  tdServ.appendChild(servSel);
+  }));
 
   // Tipo de carga (afecta SLA local)
   const tdTipo = td();
@@ -250,7 +284,7 @@ function rowNac(b) {
 
   const tdCost = costCell(), tdTransit = transitCell(), tdDel = delCell(b.id);
 
-  tr.append(tdOri, tdDes, tdVeh, tdServ, tdTipo, tdCant, tdCost, tdTransit, tdDel);
+  tr.append(tdOri, tdDes, tdPeso, tdDims, tdVeh, tdServ, tdTipo, tdCant, tdCost, tdTransit, tdDel);
   return tr;
 }
 
@@ -283,14 +317,21 @@ function computeIntl(b) {
   const factorVol = VOLUMETRIC_FACTOR[b.via] ?? VOLUMETRIC_FACTOR._default;
   const billableUnit = Math.max(pesoReal, vol * factorVol);
 
-  // Costo = Valor CIF (USD) × factor logístico (por vía + país)
-  const valor = num(b.valor);
-  const factorLog = factorDe(b.via, b.pais);
-  const costUsdUnit = valor * factorLog;
+  let costUsdUnit = 0, aviso = false, vacio = true;
+  if (b.metodo === 'kilos') {
+    // Costo = peso facturable × USD/kg histórico
+    const usdKg = (DATA.internacional.viaCost || {})[b.via] || 0;
+    costUsdUnit = billableUnit * usdKg;
+    vacio = !pesoReal && !vol;
+  } else {
+    // Costo = Valor CIF (USD) × factor logístico (por vía + país)
+    const valor = num(b.valor);
+    const factorLog = factorDe(b.via, b.pais);
+    costUsdUnit = valor * factorLog;
+    aviso = valor >= (DATA.internacional.valorMax || 10000);
+    vacio = !valor;
+  }
   const costClpUnit = usdClp ? costUsdUnit * usdClp : null;
-
-  // Regla del PDF: no factorizar sobre USD 10.000 ni sobredimensionado
-  const sobreLimite = valor >= (DATA.internacional.valorMax || 10000);
 
   return {
     cant, pesoReal: pesoReal * cant, volumen: vol * cant,
@@ -298,22 +339,35 @@ function computeIntl(b) {
     costUsd: costUsdUnit * cant,
     costClp: costClpUnit != null ? costClpUnit * cant : null,
     slaDias: slaIntl(b.via, b.pais),
-    factor: factorLog,
-    aviso: sobreLimite,
-    empty: !valor
+    aviso,
+    empty: vacio
   };
 }
 
 function computeNac(b) {
   const cant = Math.max(1, num(b.cant) || 1);
-  const tarifa = tarifaNac(b.origen, b.destino, b.veh, b.urgente);     // CLP por viaje
+  const pesoReal = num(b.peso);
+  let vol = num(b.vol);
+  if (!vol && num(b.L) && num(b.W) && num(b.H)) vol = (num(b.L) * num(b.W) * num(b.H)) / 1e6;
+
+  const veh = recomendarVehiculo(b.origen, b.destino, b.servicio, pesoReal, vol);
+  const tarifa = veh ? tarifaNac(b.origen, b.destino, veh, b.servicio) : null;
+  const cap = veh ? capacidad(veh) : null;
+  // ocupación = el mayor entre % peso y % volumen
+  let ocup = null;
+  if (cap) {
+    const okg = cap.kg ? (pesoReal / cap.kg) * 100 : 0;
+    const om3 = cap.m3 ? (vol / cap.m3) * 100 : 0;
+    ocup = Math.max(okg, om3);
+  }
   return {
-    cant, pesoReal: 0, volumen: 0, billable: 0,
+    cant, pesoReal: pesoReal * cant, volumen: vol * cant, billable: pesoReal * cant,
     costUsd: usdClp && tarifa != null ? (tarifa * cant) / usdClp : null,
     costClp: tarifa != null ? tarifa * cant : null,
     slaDias: slaLocal(b.tipoCarga, b.destino),
+    veh, ocup,
     aviso: false,
-    empty: tarifa == null
+    empty: !pesoReal && !vol
   };
 }
 
@@ -326,8 +380,18 @@ function recompute() {
     const r = mode === 'intl' ? computeIntl(b) : computeNac(b);
     const costEl = tr.querySelector('[data-role="cost"]');
     const trnEl = tr.querySelector('[data-role="transit"]');
-    if (!r || r.empty) { costEl.textContent = '—'; trnEl.textContent = '—'; costEl.title = ''; return; }
+    if (!r || r.empty) { costEl.textContent = '—'; trnEl.textContent = '—'; costEl.title = ''; const ve = tr.querySelector('[data-role="veh"]'); if (ve) ve.textContent = '—'; return; }
     anyData = true;
+    // vehículo sugerido + % ocupación (modo nacional)
+    const vehEl = tr.querySelector('[data-role="veh"]');
+    if (vehEl) {
+      if (r.veh) {
+        const pct = r.ocup != null ? ` · ${fmtInt.format(Math.min(999, Math.round(r.ocup)))}% ocup.` : '';
+        vehEl.textContent = r.veh + pct;
+        vehEl.classList.toggle('veh-over', r.ocup != null && r.ocup > 100);
+        vehEl.title = r.ocup != null && r.ocup > 100 ? 'La carga supera la capacidad de este vehículo; considera dividir el envío.' : '';
+      } else { vehEl.textContent = 'sin vehículo'; }
+    }
     // mostrar costo: CLP si hay, si no USD
     if (r.costClp != null) { costEl.textContent = fmtMoney.format(Math.round(r.costClp)); anyClp = true; totalClp += r.costClp; }
     else if (r.costUsd != null) { costEl.textContent = fmtUsd.format(Math.round(r.costUsd)); }
