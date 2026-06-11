@@ -230,3 +230,6 @@ table.bultos { width: 100%; border-collapse: collapse; font-size: 13px; min-widt
 .col-wide { min-width: 200px; }
 .col-wide select { min-width: 190px; }
 table.bultos { min-width: 1100px; }
+
+/* ---------- Aviso de factorización (valor alto) ---------- */
+.cell-cost.cost-warn { color: var(--rag-amber); }

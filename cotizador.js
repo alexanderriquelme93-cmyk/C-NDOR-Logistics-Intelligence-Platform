@@ -46,8 +46,8 @@ function setMode(m) {
   document.getElementById('modeNac').setAttribute('aria-selected', m === 'nac');
 
   document.getElementById('introText').innerHTML = m === 'intl'
-    ? 'Carga internacional. Origen, consignante y aduana provienen de la base real. El costo usa el <strong>promedio histórico</strong> por vía (USD/kg) y el tránsito sale del <strong>SLA 2026</strong> según la región de origen.'
-    : 'Carga nacional (solo transporte terrestre). Las rutas y tarifas provienen del <strong>tarifario DSV</strong>; el tránsito sale del <strong>SLA local 2026</strong> por ciudad destino.';
+    ? 'Carga internacional. Origen, consignante y aduana provienen de la base real. El costo se estima con el <strong>factor logístico 2026</strong> sobre el valor CIF (USD), por vía y país. El tránsito sale del <strong>SLA 2026</strong> según la región de origen. La factorización aplica solo a destino Chile y valor &lt; USD 10.000.'
+    : 'Carga nacional (solo transporte terrestre). Las rutas, vehículos y tarifas provienen del <strong>tarifario DSV</strong> (Base o Urgencia); el tránsito sale del <strong>SLA local 2026</strong> por ciudad destino.';
 
   buildHead();
   bultos = [];
@@ -60,10 +60,10 @@ function setMode(m) {
 function buildHead() {
   const head = document.getElementById('bultosHead');
   const cols = mode === 'intl'
-    ? ['Vía', 'Origen (país)', 'Consignante', 'Aduana', 'Peso (kg)', 'Dim. L×A×H (cm)', 'Vol. (m³)', 'Cant.', 'Costo est.', 'Tránsito', '']
-    : ['Origen', 'Destino', 'Vehículo', 'Tipo carga', 'Peso (kg)', 'Cant.', 'Costo est.', 'Tránsito', ''];
+    ? ['Vía', 'Origen (país)', 'Consignante', 'Aduana', 'Valor CIF (USD)', 'Peso (kg)', 'Dim. L×A×H (cm)', 'Vol. (m³)', 'Cant.', 'Costo est.', 'Tránsito', '']
+    : ['Origen', 'Destino', 'Vehículo', 'Servicio', 'Tipo carga', 'Cant.', 'Costo est.', 'Tránsito', ''];
   head.innerHTML = '<tr>' + cols.map((c, i) => {
-    const numClass = (mode === 'intl' && [4, 6, 7, 8, 9].includes(i)) || (mode === 'nac' && [4, 5, 6, 7].includes(i)) ? ' class="num"' : '';
+    const numClass = (mode === 'intl' && [4, 5, 7, 8, 9, 10].includes(i)) || (mode === 'nac' && [5, 6, 7].includes(i)) ? ' class="num"' : '';
     return `<th${numClass}>${c}</th>`;
   }).join('') + '</tr>';
 }
@@ -76,6 +76,10 @@ function viasIntl() { return DATA.internacional.vias.slice(); }
 function paisesDe(via) { return Object.keys(DATA.internacional.tree[via] || {}).sort(); }
 function consignantesDe(via, pais) { return (DATA.internacional.tree[via]?.[pais] || []).slice(); }
 function aduanas() { return DATA.internacional.aduanas.slice(); }
+function factorDe(via, pais) {
+  const tabla = DATA.internacional.factores[via] || {};
+  return tabla[pais] ?? DATA.internacional.factorGenerico;
+}
 function slaIntl(via, pais) {
   const region = DATA.internacional.paisRegion[pais] || 'South America';
   const tabla = DATA.sla.internacional[via] || {};
@@ -83,13 +87,13 @@ function slaIntl(via, pais) {
   return tabla[region] ?? null;
 }
 
-// Nacional (DSV)
-function rutasNac() { return DATA.nacionalDSV; }
-function origenesNac() { return [...new Set(rutasNac().map(r => r.origen))].sort(); }
-function destinosNacDe(origen) { return [...new Set(rutasNac().filter(r => r.origen === origen).map(r => r.destino))].sort(); }
-function rutaNac(origen, destino) { return rutasNac().find(r => r.origen === origen && r.destino === destino) || null; }
-function vehiculos(origen, destino) { const r = rutaNac(origen, destino); return r ? Object.keys(r.tarifas) : []; }
-function tarifaNac(origen, destino, vehiculo) { const r = rutaNac(origen, destino); return r ? (r.tarifas[vehiculo] ?? null) : null; }
+// Nacional (DSV) — base o urgencia
+function rutasNac(urgente) { return urgente ? DATA.nacionalDSV.urgencia : DATA.nacionalDSV.base; }
+function origenesNac(urgente) { return [...new Set(rutasNac(urgente).map(r => r.origen))].sort(); }
+function destinosNacDe(origen, urgente) { return [...new Set(rutasNac(urgente).filter(r => r.origen === origen).map(r => r.destino))].sort(); }
+function rutaNac(origen, destino, urgente) { return rutasNac(urgente).find(r => r.origen === origen && r.destino === destino) || null; }
+function vehiculos(origen, destino, urgente) { const r = rutaNac(origen, destino, urgente); return r ? Object.keys(r.tarifas) : []; }
+function tarifaNac(origen, destino, vehiculo, urgente) { const r = rutaNac(origen, destino, urgente); return r ? (r.tarifas[vehiculo] ?? null) : null; }
 function slaLocal(tipoCarga, ciudad) {
   const tabla = DATA.sla.local[tipoCarga] || {};
   // mapear destino DSV (puede ser faena minera) a la ciudad del SLA
@@ -107,12 +111,13 @@ function addBulto() {
     const via = viasIntl()[0] || '';
     const pais = paisesDe(via)[0] || '';
     const cons = consignantesDe(via, pais)[0] || '';
-    bultos.push({ id: nextId++, via, pais, cons, aduana: aduanas()[0] || '', peso: '', L: '', W: '', H: '', vol: '', cant: 1 });
+    bultos.push({ id: nextId++, via, pais, cons, aduana: aduanas()[0] || '', valor: '', peso: '', L: '', W: '', H: '', vol: '', cant: 1 });
   } else {
-    const origen = origenesNac()[0] || '';
-    const destino = destinosNacDe(origen)[0] || '';
-    const veh = vehiculos(origen, destino)[0] || '';
-    bultos.push({ id: nextId++, origen, destino, veh, tipoCarga: 'General', peso: '', cant: 1 });
+    const urgente = false;
+    const origen = origenesNac(urgente)[0] || '';
+    const destino = destinosNacDe(origen, urgente)[0] || '';
+    const veh = vehiculos(origen, destino, urgente)[0] || '';
+    bultos.push({ id: nextId++, origen, destino, veh, urgente, tipoCarga: 'General', cant: 1 });
   }
 }
 
@@ -160,6 +165,10 @@ function rowIntl(b) {
   const tdAdu = td();
   tdAdu.appendChild(selectInput(aduanas(), b.aduana, v => { b.aduana = v; }));
 
+  // Valor CIF (USD) — base de la factorización
+  const tdValor = td('num');
+  tdValor.appendChild(numInput(b.valor, '0', v => { b.valor = v; recompute(); }));
+
   // Peso
   const tdPeso = td('num');
   tdPeso.appendChild(numInput(b.peso, '0', v => { b.peso = v; recompute(); }));
@@ -189,7 +198,7 @@ function rowIntl(b) {
 
   const tdCost = costCell(), tdTransit = transitCell(), tdDel = delCell(b.id);
 
-  tr.append(tdVia, tdPais, tdCons, tdAdu, tdPeso, tdDims, tdVol, tdCant, tdCost, tdTransit, tdDel);
+  tr.append(tdVia, tdPais, tdCons, tdAdu, tdValor, tdPeso, tdDims, tdVol, tdCant, tdCost, tdTransit, tdDel);
   return tr;
 }
 
@@ -200,32 +209,39 @@ function rowNac(b) {
 
   // Origen
   const tdOri = td('col-wide');
-  tdOri.appendChild(selectInput(origenesNac(), b.origen, v => {
+  tdOri.appendChild(selectInput(origenesNac(b.urgente), b.origen, v => {
     b.origen = v;
-    const ds = destinosNacDe(v); if (!ds.includes(b.destino)) b.destino = ds[0] || '';
-    const vs = vehiculos(b.origen, b.destino); if (!vs.includes(b.veh)) b.veh = vs[0] || '';
+    const ds = destinosNacDe(v, b.urgente); if (!ds.includes(b.destino)) b.destino = ds[0] || '';
+    const vs = vehiculos(b.origen, b.destino, b.urgente); if (!vs.includes(b.veh)) b.veh = vs[0] || '';
     render();
   }));
 
   // Destino
   const tdDes = td('col-wide');
-  tdDes.appendChild(selectInput(destinosNacDe(b.origen), b.destino, v => {
+  tdDes.appendChild(selectInput(destinosNacDe(b.origen, b.urgente), b.destino, v => {
     b.destino = v;
-    const vs = vehiculos(b.origen, v); if (!vs.includes(b.veh)) b.veh = vs[0] || '';
+    const vs = vehiculos(b.origen, v, b.urgente); if (!vs.includes(b.veh)) b.veh = vs[0] || '';
     render();
   }));
 
-  // Vehículo
+  // Vehículo (todos los del tarifario)
   const tdVeh = td('col-wide');
-  tdVeh.appendChild(selectInput(vehiculos(b.origen, b.destino), b.veh, v => { b.veh = v; recompute(); }));
+  tdVeh.appendChild(selectInput(vehiculos(b.origen, b.destino, b.urgente), b.veh, v => { b.veh = v; recompute(); }));
+
+  // Servicio: Normal / Urgencia
+  const tdServ = td();
+  const servSel = selectInput(['Normal', 'Urgencia'], b.urgente ? 'Urgencia' : 'Normal', v => {
+    b.urgente = (v === 'Urgencia');
+    // revalidar ruta/vehículo en el tarifario correspondiente
+    const ds = destinosNacDe(b.origen, b.urgente); if (!ds.includes(b.destino)) b.destino = ds[0] || '';
+    const vs = vehiculos(b.origen, b.destino, b.urgente); if (!vs.includes(b.veh)) b.veh = vs[0] || '';
+    render();
+  });
+  tdServ.appendChild(servSel);
 
   // Tipo de carga (afecta SLA local)
   const tdTipo = td();
   tdTipo.appendChild(selectInput(['General', 'Sobredimensionado sin escolta', 'Sobredimensionado con escolta'], b.tipoCarga, v => { b.tipoCarga = v; recompute(); }));
-
-  // Peso (informativo)
-  const tdPeso = td('num');
-  tdPeso.appendChild(numInput(b.peso, '0', v => { b.peso = v; recompute(); }));
 
   // Cantidad
   const tdCant = td('num col-cant');
@@ -234,7 +250,7 @@ function rowNac(b) {
 
   const tdCost = costCell(), tdTransit = transitCell(), tdDel = delCell(b.id);
 
-  tr.append(tdOri, tdDes, tdVeh, tdTipo, tdPeso, tdCant, tdCost, tdTransit, tdDel);
+  tr.append(tdOri, tdDes, tdVeh, tdServ, tdTipo, tdCant, tdCost, tdTransit, tdDel);
   return tr;
 }
 
@@ -264,31 +280,39 @@ function computeIntl(b) {
   const pesoReal = num(b.peso);
   let vol = num(b.vol);
   if (!vol && num(b.L) && num(b.W) && num(b.H)) vol = (num(b.L) * num(b.W) * num(b.H)) / 1e6;
-  const factor = VOLUMETRIC_FACTOR[b.via] ?? VOLUMETRIC_FACTOR._default;
-  const billableUnit = Math.max(pesoReal, vol * factor);
-  const usdPerKg = DATA.internacional.viaCost[b.via] || 0;
-  const costUsdUnit = billableUnit * usdPerKg;          // costo en USD
+  const factorVol = VOLUMETRIC_FACTOR[b.via] ?? VOLUMETRIC_FACTOR._default;
+  const billableUnit = Math.max(pesoReal, vol * factorVol);
+
+  // Costo = Valor CIF (USD) × factor logístico (por vía + país)
+  const valor = num(b.valor);
+  const factorLog = factorDe(b.via, b.pais);
+  const costUsdUnit = valor * factorLog;
   const costClpUnit = usdClp ? costUsdUnit * usdClp : null;
+
+  // Regla del PDF: no factorizar sobre USD 10.000 ni sobredimensionado
+  const sobreLimite = valor >= (DATA.internacional.valorMax || 10000);
+
   return {
     cant, pesoReal: pesoReal * cant, volumen: vol * cant,
     billable: billableUnit * cant,
     costUsd: costUsdUnit * cant,
     costClp: costClpUnit != null ? costClpUnit * cant : null,
     slaDias: slaIntl(b.via, b.pais),
-    empty: !pesoReal && !vol
+    factor: factorLog,
+    aviso: sobreLimite,
+    empty: !valor
   };
 }
 
 function computeNac(b) {
   const cant = Math.max(1, num(b.cant) || 1);
-  const tarifa = tarifaNac(b.origen, b.destino, b.veh);     // CLP por viaje
-  const pesoReal = num(b.peso);
+  const tarifa = tarifaNac(b.origen, b.destino, b.veh, b.urgente);     // CLP por viaje
   return {
-    cant, pesoReal: pesoReal * cant, volumen: 0,
-    billable: pesoReal * cant,
+    cant, pesoReal: 0, volumen: 0, billable: 0,
     costUsd: usdClp && tarifa != null ? (tarifa * cant) / usdClp : null,
     costClp: tarifa != null ? tarifa * cant : null,
     slaDias: slaLocal(b.tipoCarga, b.destino),
+    aviso: false,
     empty: tarifa == null
   };
 }
@@ -302,12 +326,18 @@ function recompute() {
     const r = mode === 'intl' ? computeIntl(b) : computeNac(b);
     const costEl = tr.querySelector('[data-role="cost"]');
     const trnEl = tr.querySelector('[data-role="transit"]');
-    if (!r || r.empty) { costEl.textContent = '—'; trnEl.textContent = '—'; return; }
+    if (!r || r.empty) { costEl.textContent = '—'; trnEl.textContent = '—'; costEl.title = ''; return; }
     anyData = true;
     // mostrar costo: CLP si hay, si no USD
     if (r.costClp != null) { costEl.textContent = fmtMoney.format(Math.round(r.costClp)); anyClp = true; totalClp += r.costClp; }
     else if (r.costUsd != null) { costEl.textContent = fmtUsd.format(Math.round(r.costUsd)); }
     if (r.costUsd != null) totalUsd += r.costUsd;
+    // aviso de la regla del PDF (valor >= USD 10.000)
+    if (r.aviso) {
+      costEl.textContent += ' ⚠';
+      costEl.title = 'Valor ≥ USD 10.000: la factorización puede ser imprecisa. Completar el formulario correspondiente.';
+      costEl.classList.add('cost-warn');
+    } else { costEl.title = ''; costEl.classList.remove('cost-warn'); }
     trnEl.textContent = r.slaDias != null ? `${r.slaDias} d` : '—';
     totalBill += r.billable; totalVol += r.volumen; totalReal += r.pesoReal; totalPieces += r.cant;
     if (r.slaDias != null) maxSla = Math.max(maxSla ?? 0, r.slaDias);
